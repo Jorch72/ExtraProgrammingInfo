@@ -13,16 +13,19 @@ using Sandbox.Game.Entities.Cube;
 using Sandbox.Game.Gui;
 using Sandbox.Game.GameSystems.Electricity;
 using Sandbox.Game.World;
-using VRage.Components;
+using VRage.Game.Components;
 using VRage.ObjectBuilders;
 using VRageMath;
 using Sandbox.ModAPI;
+using VRage.Game.Entity;
 
 namespace ExtraProgrammingInfo
 {
     [MySessionComponentDescriptor(MyUpdateOrder.NoUpdate)]
     public class ExtraProgrammingInfo : MySessionComponentBase
     {
+        //static HashSet<MyPlanet> knownPlanets = new HashSet<MyPlanet>();
+
         static ExtraProgrammingInfo()
         {
             // Backwards compatibility
@@ -71,6 +74,8 @@ namespace ExtraProgrammingInfo
             //RegisterForTerminalBlock<Vector3D, MyShipController>("XGameInfo.SunDirection.Absolute", Vector3D.Zero, shipController => MySector.DirectionToSunNormalized);
             //RegisterForTerminalBlock<Vector3D, MyShipController>("XGameInfo.SunDirection.Relative", Vector3D.Zero, shipController => GetRelativeDirection(MySector.DirectionToSunNormalized, shipController);
             //RegisterForTerminalBlock<TimeSpan, MyShipController>("XGameInfo.ElapsedGameTime", TimeSpan.Zero, shipController => MySession.Static.ElapsedGameTime);
+
+            RegisterForTerminalBlock<double, MyShipController>("XShipInfo.Altitude", 0.0, block => GetAltitude(block));
         }
 
         private static void RegisterForAllTerminalBlocks<TValue>(string name, TValue defaultValue, Func<IMyTerminalBlock, TValue> getter)
@@ -109,5 +114,58 @@ namespace ExtraProgrammingInfo
             var invTensor = block.CubeGrid.Physics.RigidBody.InverseInertiaTensor;
             return new Vector3D(1 / invTensor.M11, 1 / invTensor.M22, 1 / invTensor.M33);
         }*/
+
+        private static double GetAltitude(IMyTerminalBlock block)
+        {
+            var blockPosition = block.GetPosition();
+
+            var planet = FindNearestPlanet(blockPosition);
+            if (planet == null)
+                return double.NaN;
+
+            if (Vector3D.DistanceSquared(blockPosition, planet.WorldMatrix.Translation) > planet.GravityLimitSq)
+                return double.NaN;
+            
+            Vector3D closestSurfacePointLocal = planet.GetClosestSurfacePointGlobal(ref blockPosition);
+            return Vector3D.Distance(blockPosition, closestSurfacePointLocal);
+        }
+
+        /*private static MyPlanet GetNearestPlanet(Vector3D position)
+        {
+            MyPlanet planet = GetNearestPlanet(position);
+            if (planet == null)
+                planet = GetNearestFromCache(position);
+            else
+                knownPlanets.Add(planet);
+
+            return planet;
+        }*/
+
+        /*private static MyPlanet GetNearestFromCache(Vector3D position)
+        {
+            MyPlanet planet = null;
+            double nearestDistanceSq = double.MaxValue;
+            foreach (MyPlanet knownPlanet in knownPlanets)
+            {
+                double distanceSq = Vector3D.DistanceSquared(position, knownPlanet.WorldMatrix.Translation);
+                if (distanceSq < nearestDistanceSq)
+                {
+                    nearestDistanceSq = distanceSq;
+                    planet = knownPlanet;
+                }
+            }
+            return planet;
+        }*/
+
+        private static MyPlanet FindNearestPlanet(Vector3D position)
+        {
+            BoundingSphereD sphere = new BoundingSphereD(position, 1);
+            var entities = MyEntities.GetEntitiesInSphere(ref sphere);
+            foreach (MyEntity entity in entities)
+                if (entity is MyPlanet)
+                    return (MyPlanet) entity;
+
+            return null;
+        }
     }
 }
